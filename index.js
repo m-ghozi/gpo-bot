@@ -221,8 +221,7 @@ class CronScheduler {
   _sendSpawnNotification(schedule, hour, minute) {
     const spawn = TimeUtils.makeSpawnDate(hour, minute);
     const embed = new EmbedBuilder()
-      .setTitle(`⚔️ ${schedule.boss} SPAWN`)
-      .setDescription(`Muncul ${TimeUtils.formatDiscordTime(spawn, "F")}`)
+      .setTitle(`⚔️ ${schedule.boss} Spawn!`)
       .setColor(EMBED_COLORS.spawn)
       .setTimestamp();
 
@@ -232,7 +231,7 @@ class CronScheduler {
   _sendReminderNotification(schedule, hour, minute) {
     const spawn = TimeUtils.makeSpawnDate(hour, minute);
     const embed = new EmbedBuilder()
-      .setTitle(`⏳ ${REMINDER_MINUTES} MENIT LAGI ${schedule.boss}`)
+      .setTitle(`⏳ ${REMINDER_MINUTES} Menit lagi ${schedule.boss}`)
       .setDescription(`Spawn ${TimeUtils.formatDiscordTime(spawn, "R")}`)
       .setColor(EMBED_COLORS.reminder);
 
@@ -284,7 +283,7 @@ class GPOBossBot {
     }
   }
 
-  _onMessage(msg) {
+  async _onMessage(msg) {
     if (msg.author.bot || !msg.content.startsWith(PREFIX)) return;
 
     const args = msg.content.slice(PREFIX.length).trim().split(/ +/);
@@ -297,7 +296,7 @@ class GPOBossBot {
 
     // Command: about
     if (cmd === "about") {
-      return msg.reply("🤖 GPO Boss Timer by **Shiro**\n📦 Versi 1.1");
+      return msg.reply("🤖 GPO Boss Timer by **Shiro**\n📦 Versi 1.2");
     }
 
     // Command: next
@@ -338,6 +337,20 @@ class GPOBossBot {
       }
     }
 
+    // Command: live
+    if (cmd === "live") {
+      try {
+        const channel = msg.channel;
+        // Reset tracker message to force create new one
+        this.tracker.message = null;
+        await this.tracker.update(channel);
+        return msg.reply("✅ Live tracker telah dikirim ulang!");
+      } catch (error) {
+        console.error("❌ Error in live command:", error);
+        return msg.reply("❌ Error saat mengirim live tracker!");
+      }
+    }
+
     // Command: help
     if (cmd === "help") {
       const embed = new EmbedBuilder()
@@ -346,10 +359,11 @@ class GPOBossBot {
         .setDescription(
           `**${PREFIX}next** → Spawn berikutnya\n` +
             `**${PREFIX}today** → Spawn tersisa hari ini\n` +
+            `**${PREFIX}live** → Kirim live tracker lagi\n` +
             `**${PREFIX}ping** → Cek latency bot\n` +
             `**${PREFIX}about** → Info bot`,
         )
-        .setFooter({ text: "GPO Boss Timer v2.0" });
+        .setFooter({ text: "GPO Boss Timer v1.2" });
 
       return msg.reply({ embeds: [embed] });
     }
