@@ -4,10 +4,29 @@ const cron = require("node-cron");
 
 const TOKEN = process.env.TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
-const TIMEZONE = "Asia/Jakarta";
 const PREFIX = "b!";
 
-// ================= DISCORD CLIENT =================
+// ================= WAKTU (ANTI RAILWAY BUG) =================
+const WIB_OFFSET = 7 * 60;
+
+function nowWIB() {
+  return new Date(Date.now() + WIB_OFFSET * 60000);
+}
+
+function makeWIBDate(hour, minute) {
+  const now = nowWIB();
+  const d = new Date(now);
+  d.setUTCHours(hour - 7, minute, 0, 0);
+  if (d < now) d.setUTCDate(d.getUTCDate() + 1);
+  return d;
+}
+
+function dTime(date, format = "F") {
+  const unix = Math.floor(date.getTime() / 1000);
+  return `<t:${unix}:${format}>`;
+}
+
+// ================= DISCORD =================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -15,12 +34,6 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
   ],
 });
-
-// ================= DISCORD TIME FORMAT =================
-function dTime(date, format = "F") {
-  const unix = Math.floor(date.getTime() / 1000);
-  return `<t:${unix}:${format}>`;
-}
 
 // ================= SCHEDULE =================
 const schedules = [
@@ -58,53 +71,56 @@ const schedules = [
     "23:30",
   ].map((t) => ({ boss: "Roger", time: t })),
 
-  ...[
-    "00:00",
-    "01:00",
-    "02:00",
-    "03:00",
-    "04:00",
-    "05:00",
-    "06:00",
-    "07:00",
-    "08:00",
-    "09:00",
-    "10:00",
-    "11:00",
-    "12:00",
-    "13:00",
-    "14:00",
-    "15:00",
-    "16:00",
-    "17:00",
-    "18:00",
-    "19:00",
-    "20:00",
-    "21:00",
-    "22:00",
-    "23:00",
-  ].map((t) => ({ boss: "Soul King", time: t })),
+  ...Array.from(
+    { length: 24 },
+    (_, i) => `${String(i).padStart(2, "0")}:00`,
+  ).map((t) => ({ boss: "Soul King", time: t })),
 ];
 
-// ================= GET NEXT SPAWN =================
+// ================= NEXT SPAWN =================
 function getNextSpawn() {
-  const now = new Date();
-  const nowWIB = new Date(now.toLocaleString("en-US", { timeZone: TIMEZONE }));
-
-  let upcoming = [];
-
-  schedules.forEach((s) => {
-    const [h, m] = s.time.split(":");
-    const spawn = new Date(nowWIB);
-    spawn.setHours(h, m, 0, 0);
-
-    if (spawn < nowWIB) spawn.setDate(spawn.getDate() + 1);
-
-    upcoming.push({ ...s, date: spawn });
+  const upcoming = schedules.map((s) => {
+    const [h, m] = s.time.split(":").map(Number);
+    return { ...s, date: makeWIBDate(h, m) };
   });
 
   upcoming.sort((a, b) => a.date - b.date);
   return upcoming[0];
+}
+
+// ================= LIVE TRACKER =================
+let trackerMessage = null;
+
+async function updateTracker(channel) {
+  const now = nowWIB();
+
+  let upcoming = schedules
+    .map((s) => {
+      const [h, m] = s.time.split(":").map(Number);
+      return { ...s, date: makeWIBDate(h, m) };
+    })
+    .sort((a, b) => a.date - b.date)
+    .slice(0, 5);
+
+  const embed = new EmbedBuilder()
+    .setTitle("📡 GPO LIVE BOSS TRACKER")
+    .setColor(0x00ffff)
+    .setDescription(
+      upcoming
+        .map(
+          (s) =>
+            `**${s.boss}** • ${dTime(s.date, "t")} (${dTime(s.date, "R")})`,
+        )
+        .join("\n"),
+    )
+    .setFooter({ text: "Auto update setiap 30 detik" })
+    .setTimestamp();
+
+  try {
+    if (!trackerMessage)
+      trackerMessage = await channel.send({ embeds: [embed] });
+    else await trackerMessage.edit({ embeds: [embed] });
+  } catch {}
 }
 
 // ================= READY =================
@@ -113,174 +129,103 @@ client.once("clientReady", async () => {
 
   const channel = await client.channels.fetch(CHANNEL_ID);
 
+  // LIVE UPDATE
+  setInterval(() => updateTracker(channel), 30000);
+  updateTracker(channel);
+
+  // SPAWN & REMINDER
   schedules.forEach((schedule) => {
     const [hour, minute] = schedule.time.split(":");
 
-    // SPAWN
     cron.schedule(
       `${minute} ${hour} * * *`,
       async () => {
-        const now = new Date();
+        const spawn = makeWIBDate(parseInt(hour), parseInt(minute));
+
         const embed = new EmbedBuilder()
-          .setTitle(`⚔️ ${schedule.boss} Spawn!`)
-          .setDescription(`Spawn ${dTime(now, "R")}`)
-          .setColor("Red")
+          .setTitle(`⚔️ ${schedule.boss} SPAWN`)
+          .setDescription(`Muncul ${dTime(spawn, "F")}`)
+          .setColor(0xff0000)
           .setTimestamp();
 
-        await channel.send({ embeds: [embed] });
-        console.log("SPAWN", schedule.boss, schedule.time);
+        channel.send({ embeds: [embed] });
       },
-      { timezone: TIMEZONE },
+      { timezone: "Asia/Jakarta" },
     );
 
-    // REMINDER -5
-    const rDate = new Date();
-    rDate.setHours(hour, minute, 0, 0);
-    rDate.setMinutes(rDate.getMinutes() - 5);
+    // -5 menit
+    const h = parseInt(hour),
+      m = parseInt(minute);
+    const rMin = (m - 5 + 60) % 60;
+    const rHour = m < 5 ? (h - 1 + 24) % 24 : h;
 
     cron.schedule(
-      `${rDate.getMinutes()} ${rDate.getHours()} * * *`,
+      `${rMin} ${rHour} * * *`,
       async () => {
-        const spawn = new Date();
-        spawn.setHours(hour, minute, 0, 0);
-
+        const spawn = makeWIBDate(h, m);
         const embed = new EmbedBuilder()
           .setTitle(`⏳ 5 MENIT LAGI ${schedule.boss}`)
           .setDescription(`Spawn ${dTime(spawn, "R")}`)
-          .setColor("Yellow")
-          .setTimestamp();
+          .setColor(0xffcc00);
 
-        await channel.send({ embeds: [embed] });
+        channel.send({ embeds: [embed] });
       },
-      { timezone: TIMEZONE },
+      { timezone: "Asia/Jakarta" },
     );
   });
 });
 
-// ================= COMMANDS =================
-client.on("messageCreate", async (message) => {
-  if (message.author.bot) return;
-  if (!message.content.startsWith(PREFIX)) return;
-
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+// ================= COMMAND =================
+client.on("messageCreate", async (msg) => {
+  if (msg.author.bot || !msg.content.startsWith(PREFIX)) return;
+  const args = msg.content.slice(PREFIX.length).trim().split(/ +/);
   const cmd = args.shift().toLowerCase();
 
-  // TES
-  if (cmd === "tes") return message.reply("✅ Bot aktif!");
+  if (cmd === "ping") return msg.reply(`🏓 ${client.ws.ping}ms`);
 
-  // DEV
-  if (cmd === "dev") {
-    return message.channel.send("🧪 DEV MESSAGE OK");
-  }
+  if (cmd === "about")
+    return msg.reply("🤖 GPO Boss Timer dibuat oleh **@jiii__**");
 
-  // PING
-  if (cmd === "ping") {
-    return message.reply(`🏓 ${client.ws.ping}ms`);
-  }
-
-  // ABOUT
-  if (cmd === "about") {
-    return message.reply("🤖 GPO Boss Timer dibuat oleh **Shiro**");
-  }
-
-  // NEXT
   if (cmd === "next") {
     const n = getNextSpawn();
-    return message.reply(`🔥 Spawn berikutnya:
-**${n.boss}**
-🕒 ${dTime(n.date, "t")}
-⏳ ${dTime(n.date, "R")}`);
+    return msg.reply(
+      `🔥 Next Spawn\n**${n.boss}**\n🕒 ${dTime(n.date, "t")}\n⏳ ${dTime(n.date, "R")}`,
+    );
   }
 
-  // NOW
-  if (cmd === "now") {
-    return message.reply(`🕒 Sekarang ${dTime(new Date(), "F")}`);
+  if (cmd === "now") return msg.reply(`🕒 ${dTime(new Date(), "F")}`);
+
+  if (cmd === "in") {
+    const min = parseInt(args[0]);
+    if (isNaN(min)) return msg.reply("contoh: b!in 30");
+    const t = new Date(Date.now() + min * 60000);
+    return msg.reply(`⏳ ${dTime(t, "R")}`);
   }
 
-  // LIST
-  if (cmd === "list") {
-    const grouped = {};
-    schedules.forEach((s) => {
-      if (!grouped[s.boss]) grouped[s.boss] = [];
-      grouped[s.boss].push(s.time);
-    });
-
-    let text = "📜 Jadwal Spawn:\n\n";
-    for (const boss in grouped) {
-      text += `**${boss}**\n${grouped[boss].join(", ")}\n\n`;
-    }
-    return message.reply(text);
-  }
-
-  // TODAY
   if (cmd === "today") {
-    const now = new Date();
-    let text = "📅 Spawn hari ini:\n\n";
+    const now = nowWIB();
+    let text = "📅 Spawn tersisa hari ini:\n\n";
 
     schedules.forEach((s) => {
-      const [h, m] = s.time.split(":");
-      const d = new Date();
-      d.setHours(h, m, 0, 0);
+      const [h, m] = s.time.split(":").map(Number);
+      const d = makeWIBDate(h, m);
       if (d > now) text += `${dTime(d, "t")} - ${s.boss}\n`;
     });
 
-    return message.reply(text || "Tidak ada spawn tersisa hari ini");
+    msg.reply(text || "Semua boss sudah spawn hari ini");
   }
 
-  // IN
-  if (cmd === "in") {
-    const min = parseInt(args[0]);
-    if (isNaN(min)) return message.reply("contoh: b!in 30");
-
-    const target = new Date(Date.now() + min * 60000);
-    return message.reply(`⏳ ${min} menit lagi → ${dTime(target, "t")}`);
-  }
-
-  // NEXTALL
-  if (cmd === "nextall") {
-    let arr = [];
-    const now = new Date();
-
-    schedules.forEach((s) => {
-      const [h, m] = s.time.split(":");
-      const d = new Date();
-      d.setHours(h, m, 0, 0);
-      if (d < now) d.setDate(d.getDate() + 1);
-      arr.push({ ...s, date: d });
-    });
-
-    arr.sort((a, b) => a.date - b.date);
-
-    let text = "🔥 10 Spawn Berikutnya:\n\n";
-    arr.slice(0, 10).forEach((a) => {
-      text += `${dTime(a.date, "t")} - ${a.boss} (${dTime(a.date, "R")})\n`;
-    });
-
-    return message.reply(text);
-  }
-
-  // HELP
   if (cmd === "help") {
-    return message.reply(`
-  📖 **GPO Boss Timer Commands**
+    msg.reply(`
+📖 COMMAND LIST
 
-  ⚔️ Spawn Info
-  \`${PREFIX}next\` - Spawn berikutnya
-  \`${PREFIX}nextall\` - 10 spawn berikutnya
-  \`${PREFIX}today\` - Spawn sisa hari ini
-  \`${PREFIX}list\` - Semua jadwal boss
-
-  🕒 Time
-  \`${PREFIX}now\` - Waktu sekarang
-  \`${PREFIX}in <menit>\` - Hitung waktu ke depan
-
-  🤖 Bot
-  \`${PREFIX}ping\` - Cek latency
-  \`${PREFIX}about\` - Info bot
-  \`${PREFIX}tes\` - Tes bot aktif
-  \`${PREFIX}dev\` - Dev test
-  \`${PREFIX}help\` - Tampilkan command
-  `);
+b!next → spawn berikutnya
+b!today → spawn hari ini
+b!in <menit>
+b!now
+b!ping
+b!about
+`);
   }
 });
 
