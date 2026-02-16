@@ -4,26 +4,29 @@ const cron = require("node-cron");
 
 const TOKEN = process.env.TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
-const PREFIX = "b!";
+const PREFIX = "d:";
 
-// ================= WAKTU (ANTI RAILWAY BUG) =================
-const WIB_OFFSET = 7 * 60;
+// ================= TIME ENGINE =================
+const WIB_OFFSET = 7 * 60 * 60 * 1000; // UTC+7
 
 function nowWIB() {
-  return new Date(Date.now() + WIB_OFFSET * 60000);
+  return new Date(Date.now() + WIB_OFFSET);
 }
 
-function makeWIBDate(hour, minute) {
+function makeSpawnDate(hour, minute) {
   const now = nowWIB();
-  const d = new Date(now);
-  d.setUTCHours(hour - 7, minute, 0, 0);
-  if (d < now) d.setUTCDate(d.getUTCDate() + 1);
-  return d;
+
+  const spawn = new Date(now);
+  spawn.setUTCHours(hour - 7, minute, 0, 0);
+  // convert WIB -> UTC (biar konsisten)
+
+  if (spawn < new Date()) spawn.setUTCDate(spawn.getUTCDate() + 1);
+
+  return spawn;
 }
 
 function dTime(date, format = "F") {
-  const unix = Math.floor(date.getTime() / 1000);
-  return `<t:${unix}:${format}>`;
+  return `<t:${Math.floor(date.getTime() / 1000)}:${format}>`;
 }
 
 // ================= DISCORD =================
@@ -81,23 +84,31 @@ const schedules = [
 function getNextSpawn() {
   const upcoming = schedules.map((s) => {
     const [h, m] = s.time.split(":").map(Number);
-    return { ...s, date: makeWIBDate(h, m) };
+    return { ...s, date: makeSpawnDate(h, m) };
   });
 
   upcoming.sort((a, b) => a.date - b.date);
-  return upcoming[0];
+
+  const firstTime = upcoming[0].date.getTime();
+
+  const sameBoss = upcoming.filter((s) => s.date.getTime() === firstTime);
+
+  return {
+    date: upcoming[0].date,
+    bosses: sameBoss.map((s) => s.boss),
+  };
 }
 
 // ================= LIVE TRACKER =================
 let trackerMessage = null;
 
 async function updateTracker(channel) {
-  const now = nowWIB();
+  const now = new Date();
 
   let upcoming = schedules
     .map((s) => {
       const [h, m] = s.time.split(":").map(Number);
-      return { ...s, date: makeWIBDate(h, m) };
+      return { ...s, date: makeSpawnDate(h, m) };
     })
     .sort((a, b) => a.date - b.date)
     .slice(0, 5);
@@ -113,7 +124,7 @@ async function updateTracker(channel) {
         )
         .join("\n"),
     )
-    .setFooter({ text: "Auto update setiap 30 detik" })
+    .setFooter({ text: "Auto update setiap 1 Menit" })
     .setTimestamp();
 
   try {
@@ -130,7 +141,7 @@ client.once("clientReady", async () => {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
   // LIVE UPDATE
-  setInterval(() => updateTracker(channel), 30000);
+  setInterval(() => updateTracker(channel), 60000);
   updateTracker(channel);
 
   // SPAWN & REMINDER
@@ -140,7 +151,7 @@ client.once("clientReady", async () => {
     cron.schedule(
       `${minute} ${hour} * * *`,
       async () => {
-        const spawn = makeWIBDate(parseInt(hour), parseInt(minute));
+        const spawn = makeSpawnDate(parseInt(hour), parseInt(minute));
 
         const embed = new EmbedBuilder()
           .setTitle(`⚔️ ${schedule.boss} SPAWN`)
@@ -162,7 +173,7 @@ client.once("clientReady", async () => {
     cron.schedule(
       `${rMin} ${rHour} * * *`,
       async () => {
-        const spawn = makeWIBDate(h, m);
+        const spawn = makeSpawnDate(h, m);
         const embed = new EmbedBuilder()
           .setTitle(`⏳ 5 MENIT LAGI ${schedule.boss}`)
           .setDescription(`Spawn ${dTime(spawn, "R")}`)
@@ -184,13 +195,15 @@ client.on("messageCreate", async (msg) => {
   if (cmd === "ping") return msg.reply(`🏓 ${client.ws.ping}ms`);
 
   if (cmd === "about")
-    return msg.reply("🤖 GPO Boss Timer dibuat oleh **@jiii__**");
+    return msg.reply("🤖 GPO Boss Timer dibuat oleh **Shiro**");
 
   if (cmd === "next") {
     const n = getNextSpawn();
-    return msg.reply(
-      `🔥 Next Spawn\n**${n.boss}**\n🕒 ${dTime(n.date, "t")}\n⏳ ${dTime(n.date, "R")}`,
-    );
+
+    return msg.reply(`🔥 **Next Spawn**
+  ${n.bosses.map((b) => `⚔️ ${b}`).join("\n")}
+  🕒 ${dTime(n.date, "t")}
+  ⏳ ${dTime(n.date, "R")}`);
   }
 
   if (cmd === "now") return msg.reply(`🕒 ${dTime(new Date(), "F")}`);
@@ -203,12 +216,12 @@ client.on("messageCreate", async (msg) => {
   }
 
   if (cmd === "today") {
-    const now = nowWIB();
+    const now = new Date();
     let text = "📅 Spawn tersisa hari ini:\n\n";
 
     schedules.forEach((s) => {
       const [h, m] = s.time.split(":").map(Number);
-      const d = makeWIBDate(h, m);
+      const d = makeSpawnDate(h, m);
       if (d > now) text += `${dTime(d, "t")} - ${s.boss}\n`;
     });
 
