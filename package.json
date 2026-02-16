@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "description": "GPO Boss Spawn Timer BOT",
   "main": "index.js",
+  "private": true,
   "scripts": {
     "start": "node index.js"
+  },
+  "engines": {
+    "node": "22.x"
   },
   "dependencies": {
     "discord.js": "^14.25.1",

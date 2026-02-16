@@ -1,0 +1,8 @@
+[deploy]
+restartPolicyType = "always"
+
+[build]
+builder = "NIXPACKS"
+
+[service]
+internal_port = 0
