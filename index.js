@@ -1,6 +1,6 @@
 require("dotenv").config();
-import { Client, GatewayIntentBits, EmbedBuilder } from "discord.js";
-import { schedule as _schedule } from "node-cron";
+const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
+const cron = require("node-cron");
 
 // =====================
 // CONFIG
@@ -92,7 +92,7 @@ const schedules = [
 // READY EVENT
 // =====================
 
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`✅ Bot login sebagai ${client.user.tag}`);
   console.log(`🕒 Timezone set ke ${TIMEZONE}`);
   console.log(`📅 Server time sekarang:`, new Date().toString());
@@ -100,9 +100,10 @@ client.once("ready", async () => {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
   schedules.forEach((schedule) => {
+    // ================= SPAWN TIME =================
     const [hour, minute] = schedule.time.split(":");
 
-    _schedule(
+    cron.schedule(
       `${minute} ${hour} * * *`,
       async () => {
         const embed = new EmbedBuilder()
@@ -113,9 +114,32 @@ client.once("ready", async () => {
         await channel.send({ embeds: [embed] });
         console.log(`📢 ${schedule.boss} spawn dikirim (${schedule.time})`);
       },
-      {
-        timezone: TIMEZONE,
+      { timezone: TIMEZONE },
+    );
+
+    // ================= REMINDER -5 MENIT =================
+    const date = new Date();
+    date.setHours(parseInt(hour));
+    date.setMinutes(parseInt(minute));
+    date.setSeconds(0);
+
+    date.setMinutes(date.getMinutes() - 5);
+
+    let rHour = date.getHours();
+    let rMinute = date.getMinutes();
+
+    cron.schedule(
+      `${rMinute} ${rHour} * * *`,
+      async () => {
+        const embed = new EmbedBuilder()
+          .setTitle(`⏳ 5 MENIT LAGI ${schedule.boss} akan spawn!`)
+          .setColor("Yellow")
+          .setTimestamp();
+
+        await channel.send({ embeds: [embed] });
+        console.log(`⏰ Reminder ${schedule.boss} (${schedule.time})`);
       },
+      { timezone: TIMEZONE },
     );
   });
 });
