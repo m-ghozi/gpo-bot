@@ -15,7 +15,11 @@ const TIMEZONE = "Asia/Jakarta";
 // =====================
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 // =====================
@@ -142,6 +146,92 @@ client.once("clientReady", async () => {
       { timezone: TIMEZONE },
     );
   });
+});
+
+// =====================
+// COMMAND HANDLER
+// =====================
+
+const PREFIX = "b!";
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+  if (!message.content.startsWith(PREFIX)) return;
+
+  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+
+  // ================= b!tes =================
+  if (command === "tes") {
+    return message.reply("✅ Bot aktif dan berjalan normal!");
+  }
+
+  // ================= b!dev =================
+  if (command === "dev") {
+    const embed = new EmbedBuilder()
+      .setTitle("🧪 DEV TEST SPAWN")
+      .setDescription("Ini adalah pesan percobaan spawn.")
+      .setColor("Blue")
+      .setTimestamp();
+
+    return message.channel.send({ embeds: [embed] });
+  }
+
+  // ================= b!list =================
+  if (command === "list") {
+    const grouped = {};
+
+    schedules.forEach((s) => {
+      if (!grouped[s.boss]) grouped[s.boss] = [];
+      grouped[s.boss].push(s.time);
+    });
+
+    let text = "📜 **Daftar Jadwal Spawn:**\n\n";
+
+    for (const boss in grouped) {
+      text += `**${boss}**\n`;
+      text += grouped[boss].join(", ");
+      text += "\n\n";
+    }
+
+    return message.reply(text);
+  }
+
+  // ================= b!next =================
+  if (command === "next") {
+    const now = new Date();
+
+    let upcoming = [];
+
+    schedules.forEach((s) => {
+      const [h, m] = s.time.split(":");
+      const spawn = new Date();
+      spawn.setHours(parseInt(h));
+      spawn.setMinutes(parseInt(m));
+      spawn.setSeconds(0);
+
+      if (spawn < now) {
+        spawn.setDate(spawn.getDate() + 1);
+      }
+
+      upcoming.push({
+        boss: s.boss,
+        time: s.time,
+        date: spawn,
+      });
+    });
+
+    upcoming.sort((a, b) => a.date - b.date);
+
+    const next = upcoming[0];
+
+    const diffMs = next.date - now;
+    const diffMin = Math.floor(diffMs / 60000);
+
+    return message.reply(
+      `🔥 Spawn berikutnya:\n**${next.boss}** pada ${next.time} WIB\n⏳ ${diffMin} menit lagi`,
+    );
+  }
 });
 
 // =====================
