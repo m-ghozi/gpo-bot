@@ -1,6 +1,6 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
-const cron = require("node-cron");
+import { Client, GatewayIntentBits, EmbedBuilder } from "discord.js";
+import { schedule as _schedule } from "node-cron";
 
 // =====================
 // CONFIG
@@ -24,20 +24,68 @@ const client = new Client({
 
 const schedules = [
   // MIHAWK
-  ...["01:00","03:00","05:00","07:00","09:00","11:00","13:00","15:00","17:00","19:00","21:00","23:00"]
-    .map(time => ({ boss: "Mihawk", time })),
+  ...[
+    "01:00",
+    "03:00",
+    "05:00",
+    "07:00",
+    "09:00",
+    "11:00",
+    "13:00",
+    "15:00",
+    "17:00",
+    "19:00",
+    "21:00",
+    "23:00",
+  ].map((time) => ({ boss: "Mihawk", time })),
 
   // ROGER
-  ...["01:00","02:30","04:00","05:30","07:00","08:30","10:00","11:30","13:00","14:30","16:00","17:30","19:00","20:30","22:00","23:30"]
-    .map(time => ({ boss: "Roger", time })),
+  ...[
+    "01:00",
+    "02:30",
+    "04:00",
+    "05:30",
+    "07:00",
+    "08:30",
+    "10:00",
+    "11:30",
+    "13:00",
+    "14:30",
+    "16:00",
+    "17:30",
+    "19:00",
+    "20:30",
+    "22:00",
+    "23:30",
+  ].map((time) => ({ boss: "Roger", time })),
 
   // SOUL KING
   ...[
-    "00:00","01:00","02:00","03:00","04:00","05:00","06:00",
-    "07:00","08:00","09:00","10:00","11:00","12:00",
-    "13:00","14:00","15:00","16:00","17:00","18:00",
-    "19:00","20:00","21:00","22:00","23:00"
-  ].map(time => ({ boss: "Soul King", time }))
+    "00:00",
+    "01:00",
+    "02:00",
+    "03:00",
+    "04:00",
+    "05:00",
+    "06:00",
+    "07:00",
+    "08:00",
+    "09:00",
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+    "18:00",
+    "19:00",
+    "20:00",
+    "21:00",
+    "22:00",
+    "23:00",
+  ].map((time) => ({ boss: "Soul King", time })),
 ];
 
 // =====================
@@ -51,15 +99,14 @@ client.once("ready", async () => {
 
   const channel = await client.channels.fetch(CHANNEL_ID);
 
-  schedules.forEach(schedule => {
+  schedules.forEach((schedule) => {
     const [hour, minute] = schedule.time.split(":");
 
-    cron.schedule(
+    _schedule(
       `${minute} ${hour} * * *`,
       async () => {
         const embed = new EmbedBuilder()
-          .setTitle(`🔥 ${schedule.boss} SPAWN SEKARANG!`)
-          .setDescription(`⏰ Waktu: ${schedule.time} WIB`)
+          .setTitle(`⚔️ ${schedule.boss} Spawn!`)
           .setColor("Red")
           .setTimestamp();
 
@@ -67,8 +114,8 @@ client.once("ready", async () => {
         console.log(`📢 ${schedule.boss} spawn dikirim (${schedule.time})`);
       },
       {
-        timezone: TIMEZONE
-      }
+        timezone: TIMEZONE,
+      },
     );
   });
 });
