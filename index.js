@@ -7,7 +7,7 @@ const TOKEN = process.env.TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const PREFIX = process.env.PREFIX || "d:";
 const WIB_OFFSET = 7 * 60 * 60 * 1000; // UTC+7
-const TRACKER_UPDATE_INTERVAL = 60000; // 1 menit
+const TRACKER_UPDATE_INTERVAL = 300000; // 5 menit
 const REMINDER_MINUTES = 5;
 
 // ================= CONFIG =================
@@ -98,7 +98,7 @@ class ScheduleManager {
     return schedules;
   }
 
-  getUpcomingSpawns(limit = 5) {
+  getUpcomingSpawns(limit = 2) {
     return this.schedules
       .map((s) => {
         const [h, m] = TimeUtils.parseTime(s.time);
@@ -139,7 +139,7 @@ class LiveTracker {
   }
 
   createEmbed() {
-    const upcoming = this.scheduleManager.getUpcomingSpawns(5);
+    const upcoming = this.scheduleManager.getUpcomingSpawns(2);
     const description = upcoming
       .map((s) => {
         const time = TimeUtils.formatDiscordTime(s.date, "t");
@@ -292,7 +292,7 @@ class GPOBossBot {
 
     // Command: about
     if (cmd === "about") {
-      return msg.reply("🤖 GPO Boss Timer by **Shiro**\n📦 Versi 1.2");
+      return msg.reply("🤖 GPO Boss Timer by **Shiro**\n📦 Versi 1.3");
     }
 
     // Command: next
