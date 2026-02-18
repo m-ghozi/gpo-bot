@@ -44,10 +44,6 @@ const BOSS_SCHEDULES = {
     "22:00",
     "23:30",
   ],
-  "Soul King": Array.from(
-    { length: 24 },
-    (_, i) => `${String(i).padStart(2, "0")}:00`,
-  ),
 };
 
 const EMBED_COLORS = {
